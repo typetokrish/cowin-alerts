@@ -88,7 +88,7 @@ func getDistricts() []district {
 func getAvailablCentersByDistrict(district district) []center {
 	currentTime := time.Now()
 	date := currentTime.Format("2006-01-02")
-	date = "2021-05-08"
+	date = time.Now().Format("02-01-2006")
 	url := "https://cdn-api.co-vin.in/api/v2/appointment/sessions/public/calendarByDistrict"
 	url = url + "?district_id=" + strconv.Itoa(district.DistrictId) + "&date=" + date
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
@@ -25,19 +26,22 @@ type fee struct {
 type session struct {
 	SessionId         string   `json:"session_id"`
 	Date              string   `json:"date"`
-	AvailableCapacity string   `json:"available_capacity"`
-	MinAgeLimit       string   `json:"min_age_limit"`
+	AvailableCapacity int      `json:"available_capacity"`
+	MinAgeLimit       int      `json:"min_age_limit"`
 	Vaccine           string   `json:"vaccine"`
 	Slots             []string `json:"slots"`
+	From              string   `json:"from"`
+	To                string   `json:"to"`
 }
 type center struct {
-	CenterId       string `json:"center_id"`
-	CenterName     string `json:"name"`
-	CenterNameFull string `json:"name_l"`
-	BlockName      string `json:"block_name"`
-	Pincode        string `json:"pincode"`
-	VaccineFee     []fee
-	Sessions       []session `json:"sessions"`
+	CenterId      int    `json:"center_id"`
+	CenterName    string `json:"name"`
+	CenterAddress string `json:"address"`
+	BlockName     string `json:"block_name"`
+	Pincode       int    `json:"pincode"`
+	FeeType       string `json:"fee_type"`
+	VaccineFee    []fee
+	Sessions      []session `json:"sessions"`
 }
 
 type CenterResponse struct {
@@ -51,7 +55,7 @@ func getDistricts() []district {
 	//Api URL for the Districts
 	url := "https://cdn-api.co-vin.in/api/v2/admin/location/districts/17"
 
-	httpClient := &http.Client{Timeout: time.Second * 3}
+	httpClient := &http.Client{Timeout: time.Second * 15}
 	req, errR := http.NewRequest(http.MethodGet, url, nil)
 
 	if errR != nil {
@@ -74,7 +78,7 @@ func getDistricts() []district {
 	if errResp != nil {
 		fmt.Println("Response Error", errResp)
 	}
-	fmt.Println(responseBytes)
+	//fmt.Println(responseBytes)
 
 	//parse the api respons to a fixed struct / json
 	var apiResponse districtResponse
@@ -90,9 +94,7 @@ func getAvailablCentersByDistrict(district district) []center {
 	url := "https://cdn-api.co-vin.in/api/v2/appointment/sessions/public/calendarByDistrict"
 	url = url + "?district_id=" + strconv.Itoa(district.DistrictId) + "&date=" + date
 
-	fmt.Println("API CALL", url)
-
-	httpClient := &http.Client{Timeout: time.Second * 3}
+	httpClient := &http.Client{Timeout: time.Second * 30}
 	req, errR := http.NewRequest(http.MethodGet, url, nil)
 
 	if errR != nil {
@@ -110,7 +112,7 @@ func getAvailablCentersByDistrict(district district) []center {
 	defer resp.Body.Close()
 
 	responseBytes, errResp := ioutil.ReadAll(resp.Body)
-	fmt.Println(string(responseBytes))
+	//fmt.Println(string(responseBytes))
 
 	if errResp != nil {
 		fmt.Println("Response Error", errResp)
@@ -126,16 +128,61 @@ func getAvailablCentersByDistrict(district district) []center {
 
 }
 
+func notifyTelgramChannel(district district, centers []center) {
+
+	botKey := ""
+	chatId := "@cowinalertskerala2021"
+	var message string
+	message = "Slots opened for district " + district.DistrictName
+	message = message + "["
+	for _, center := range centers {
+		message = message + "  " + center.CenterName + ", "
+	}
+	message = url.QueryEscape(message + "]")
+
+	url := "https://api.telegram.org/bot" + botKey + "/sendMessage?chat_id=" + chatId + "&text=" + message
+	fmt.Println(url)
+
+	httpClient := &http.Client{Timeout: time.Second * 30}
+	req, errR := http.NewRequest(http.MethodGet, url, nil)
+
+	if errR != nil {
+		fmt.Println("Request Error", errR)
+
+	}
+	//Define http headers
+	req.Header.Add("content-type", "application/json")
+	req.Header.Add("user-agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.72 Safari/537.36")
+
+	resp, errDo := httpClient.Do(req)
+	if errDo != nil {
+		fmt.Println("Cannot Fetch the Centers Now", errDo)
+	}
+	defer resp.Body.Close()
+
+	responseBytes, errResp := ioutil.ReadAll(resp.Body)
+	//fmt.Println(string(responseBytes))
+
+	if errResp != nil {
+		fmt.Println("Telegram Response Error", errResp)
+	}
+
+	fmt.Println("Telegram API", string(responseBytes))
+
+}
+
 func main() {
 	fmt.Println("CoWin Alerts Main Started")
 	districts := getDistricts()
 
 	for _, district := range districts {
 		centers := getAvailablCentersByDistrict(district)
+		fmt.Println("Cnters", centers)
 		if len(centers) == 0 {
 			fmt.Println("There is no centers available for District", district)
 		} else {
-
+			fmt.Println("Notifying Channel", district)
+			notifyTelgramChannel(district, centers)
 		}
 	}
 
